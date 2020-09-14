@@ -49,6 +49,22 @@ namespace SeriousAPI.Controllers
             return NoContent();
         }
 
+        [HttpPatch] // Look up how to safe against repeat requests
+        public async Task<IActionResult> PatchProduct(int id, string field, string newValue)
+        {
+            var cmd = this.MySqlDatabase.Connection.CreateCommand();
+            MySqlCommandBuilder cmdBuilder = new MySqlCommandBuilder();
+            string fieldName = cmdBuilder.QuoteIdentifier(field);
+
+            cmd.CommandText = @"UPDATE ProductsTable SET " + fieldName +  " = @NewValue WHERE ProductId = @Id;";
+            cmd.Parameters.AddWithValue("@Id", id);
+            //cmd.Parameters.AddWithValue("@Field", fieldName);
+            cmd.Parameters.AddWithValue("@NewValue", newValue);
+
+            await Task.Run(() => cmd.ExecuteNonQuery());
+            return NoContent();
+        }
+
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> DeleteProductById(int id)
         {

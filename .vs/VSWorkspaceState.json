@@ -1,8 +1,9 @@
 {
   "ExpandedNodes": [
     "",
+    "\\bin\\Debug",
     "\\Controllers"
   ],
-  "SelectedNode": "\\Controllers\\ProductsController.cs",
+  "SelectedNode": "\\SeriousAPI.sln",
   "PreviewInSolutionExplorer": false
 }

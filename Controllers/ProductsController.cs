@@ -22,12 +22,25 @@ namespace SeriousAPI.Controllers
             this.MySqlDatabase = mySqlDatabase;
         }
 
+        /*
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Product>>> ListProducts()
         {
             var cmd = this.MySqlDatabase.Connection.CreateCommand();
             cmd.CommandText = @"SELECT * FROM ProductsTable";
             
+            MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
+
+            return CreateProductList(dataReader);
+        }*/
+
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<Product>>> ListProducts([FromQuery]string searchQuery)
+        {
+            var cmd = this.MySqlDatabase.Connection.CreateCommand();
+            cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductName=@Query;";
+            cmd.Parameters.AddWithValue("@Query", searchQuery);
+
             MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
 
             return CreateProductList(dataReader);
@@ -58,7 +71,6 @@ namespace SeriousAPI.Controllers
 
             cmd.CommandText = @"UPDATE ProductsTable SET " + fieldName +  " = @NewValue WHERE ProductId = @Id;";
             cmd.Parameters.AddWithValue("@Id", id);
-            //cmd.Parameters.AddWithValue("@Field", fieldName);
             cmd.Parameters.AddWithValue("@NewValue", newValue);
 
             await Task.Run(() => cmd.ExecuteNonQuery());

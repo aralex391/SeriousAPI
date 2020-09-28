@@ -22,28 +22,30 @@ namespace SeriousAPI.Controllers
             this.MySqlDatabase = mySqlDatabase;
         }
 
-        /*
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Product>>> ListProducts()
+        public async Task<ActionResult<SearchResultDTO>> ListResults(string searchType, string searchQuery)
         {
             var cmd = this.MySqlDatabase.Connection.CreateCommand();
-            cmd.CommandText = @"SELECT * FROM ProductsTable";
+            SearchResultDTO result = new SearchResultDTO();
+
+            // Handle product list
+            result.products = await ListProducts(searchType, searchQuery);
+
+            // Handle category list
+            if (searchType == "preview")
+            {
+                cmd.CommandText = @"SELECT DISTINCT ProductCategory FROM ProductsTable WHERE ProductCategory=@Category;";
+                cmd.Parameters.AddWithValue("@Category", searchQuery);
+
+                MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
+                List<string> categoryList = CreateCategoryList(dataReader);
+                result.categories = categoryList;
+            } else
+            {
+                result.categories = new List<string>();
+            }
             
-            MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
-
-            return CreateProductList(dataReader);
-        }*/
-
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Product>>> ListProducts([FromQuery]string searchQuery)
-        {
-            var cmd = this.MySqlDatabase.Connection.CreateCommand();
-            cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductName=@Query;";
-            cmd.Parameters.AddWithValue("@Query", searchQuery);
-
-            MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
-
-            return CreateProductList(dataReader);
+            return result;
         }
 
         [HttpPost]
@@ -51,8 +53,9 @@ namespace SeriousAPI.Controllers
         {
             var cmd = this.MySqlDatabase.Connection.CreateCommand();
 
-            cmd.CommandText = @"INSERT INTO ProductsTable(ProductName, ProductPrice, ProductStock, ProductDescription)" +
-                "VALUES(@Name, @Price, @Stock, @Description);";
+            cmd.CommandText = @"INSERT INTO ProductsTable(ProductCategory, ProductName, ProductPrice, ProductStock, ProductDescription)" +
+                "VALUES(@Category, @Name, @Price, @Stock, @Description);";
+            cmd.Parameters.AddWithValue("@Category", product.Category);
             cmd.Parameters.AddWithValue("@Name", product.Name);
             cmd.Parameters.AddWithValue("@Price", product.Price);
             cmd.Parameters.AddWithValue("@Stock", product.Stock);
@@ -62,7 +65,7 @@ namespace SeriousAPI.Controllers
             return NoContent();
         }
 
-        [HttpPatch] // Look up how to safe against repeat requests
+        [HttpPatch] // Look up how to safe against repeat requests // ****UNUSED****
         public async Task<IActionResult> PatchProduct(int id, string field, string newValue)
         {
             var cmd = this.MySqlDatabase.Connection.CreateCommand();
@@ -72,6 +75,24 @@ namespace SeriousAPI.Controllers
             cmd.CommandText = @"UPDATE ProductsTable SET " + fieldName +  " = @NewValue WHERE ProductId = @Id;";
             cmd.Parameters.AddWithValue("@Id", id);
             cmd.Parameters.AddWithValue("@NewValue", newValue);
+
+            await Task.Run(() => cmd.ExecuteNonQuery());
+            return NoContent();
+        }
+
+        [HttpPut]
+        public async Task<IActionResult> UpdateProduct(Product product)
+        {
+            var cmd = this.MySqlDatabase.Connection.CreateCommand();
+
+            cmd.CommandText = @"UPDATE ProductsTable SET ProductCategory=@Category, ProductName = @Name, ProductPrice = @Price, " + 
+                "ProductStock = @Stock, ProductDescription = @Description WHERE ProductId = @Id";
+            cmd.Parameters.AddWithValue("@Category", product.Category);
+            cmd.Parameters.AddWithValue("@Name", product.Name);
+            cmd.Parameters.AddWithValue("@Price", product.Price);
+            cmd.Parameters.AddWithValue("@Stock", product.Stock);
+            cmd.Parameters.AddWithValue("@Description", product.Description);
+            cmd.Parameters.AddWithValue("@Id", product.Id);
 
             await Task.Run(() => cmd.ExecuteNonQuery());
             return NoContent();
@@ -101,6 +122,38 @@ namespace SeriousAPI.Controllers
             return NoContent();
         }
 
+        private async Task<IEnumerable<Product>> ListProducts(string searchType, string searchQuery)
+        {
+            var cmd = this.MySqlDatabase.Connection.CreateCommand();
+
+            if ((searchType == "string") || (searchType == "preview"))
+            {
+                cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductName=@Query;";
+                cmd.Parameters.AddWithValue("@Query", searchQuery);
+
+            }
+            else if (searchType == "category")
+            {
+                cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductCategory=@Category;";
+                cmd.Parameters.AddWithValue("@Category", searchQuery);
+            }
+
+            MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
+            return CreateProductList(dataReader);
+        }
+
+        private List<string> CreateCategoryList(MySqlDataReader dataReader)
+        {
+            List<string> categories = new List<string>();
+
+            while (dataReader.Read())
+            {
+                categories.Add((string)dataReader["ProductCategory"]);
+            }
+            dataReader.Close();
+            return categories;
+        }
+
         private List<Product> CreateProductList(MySqlDataReader dataReader)
         {
             List<Product> products = new List<Product>();
@@ -109,6 +162,7 @@ namespace SeriousAPI.Controllers
             {
                 Product product = new Product();
                 product.Id = (int)dataReader["ProductId"];
+                product.Category = (string)dataReader["ProductCategory"];
                 product.Name = (string)dataReader["ProductName"];
                 product.Price = (int)dataReader["ProductPrice"];
                 product.Stock = (int)dataReader["ProductStock"];
@@ -123,7 +177,7 @@ namespace SeriousAPI.Controllers
 
                 products.Add(product);
             }
-
+            dataReader.Close();
             return products;
         }
     }

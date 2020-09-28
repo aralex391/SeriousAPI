@@ -10,7 +10,9 @@ namespace SeriousAPI.Models
     {
         public int Id { get; set; }
         [Required]
-        public int Price { get; set; } //try feeding negative value
+        public string Category { get; set; }
+        [Required]
+        public int Price { get; set; } 
         [Required]
         public string Name { get; set; }
         [Required]

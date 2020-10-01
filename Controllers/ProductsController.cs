@@ -128,13 +128,15 @@ namespace SeriousAPI.Controllers
 
             if ((searchType == "string") || (searchType == "preview"))
             {
-                cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductName=@Query;";
+                //cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductName=@Query;";
+                cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductName LIKE CONCAT('%', @Query, '%');";
                 cmd.Parameters.AddWithValue("@Query", searchQuery);
 
             }
             else if (searchType == "category")
             {
-                cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductCategory=@Category;";
+                cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductCategory LIKE CONCAT('%', @Category, '%');";
+                //cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductCategory=@Category;";
                 cmd.Parameters.AddWithValue("@Category", searchQuery);
             }
 

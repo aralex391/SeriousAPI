@@ -23,13 +23,20 @@ namespace SeriousAPI.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<SearchResultDTO>> ListResults(string searchType, string searchQuery)
+        public async Task<ActionResult<SearchResultDTO>> SearchResults(string searchType, string searchQuery, [FromQuery] string[] filter = null)
         {
             var cmd = this.MySqlDatabase.Connection.CreateCommand();
             SearchResultDTO result = new SearchResultDTO();
 
             // Handle product list
-            result.products = await ListProducts(searchType, searchQuery);
+            if (searchType == "filter" && (filter != null && filter.Length != 0))
+            {
+                result.products = await ListFilteredProducts(searchQuery, filter);
+            } else
+            {
+                result.products = await ListProducts(searchType, searchQuery);
+            }
+            
 
             // Handle category list
             if (searchType == "preview")
@@ -142,6 +149,43 @@ namespace SeriousAPI.Controllers
 
             MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
             return CreateProductList(dataReader);
+        }
+
+        private async Task<IEnumerable<Product>> ListFilteredProducts(string searchQuery, string[] filter)
+        {
+            FilterContainer filterContainer = new FilterContainer(filter);
+            var cmd = this.MySqlDatabase.Connection.CreateCommand();
+
+            cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ";
+            int counter = 0;
+            foreach(var entry in filterContainer.FilterDictionary)
+            {
+                if (counter > 0)
+                {
+                    cmd.CommandText += " AND ";
+                }
+                cmd.CommandText += AddFilter(entry);
+                counter++;
+            }
+            cmd.CommandText += ";";
+            Debug.WriteLine("This is your command: " + cmd.CommandText);
+            MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
+            return CreateProductList(dataReader);
+        }
+
+        private string AddFilter(KeyValuePair<string, string> entry)
+        {
+            switch (entry.Key)
+            {
+                case "string":
+                    return "ProductName LIKE CONCAT('%', '" + entry.Value + "' , '%')";
+                case "category":
+                    return "ProductCategory = " + entry.Value;
+                case "stock":
+                    return "ProductStock > 0";
+                default:
+                    return "";
+            }
         }
 
         private List<string> CreateCategoryList(MySqlDataReader dataReader)

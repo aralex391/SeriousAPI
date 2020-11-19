@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 using MySql.Data.MySqlClient;
+using Renci.SshNet.Security;
 using SeriousAPI.Models;
 
 namespace SeriousAPI.Controllers
@@ -27,9 +29,8 @@ namespace SeriousAPI.Controllers
         {
             var cmd = this.MySqlDatabase.Connection.CreateCommand();
             SearchResultDTO result = new SearchResultDTO();
-
             // Handle product list
-            if (searchType == "filter" && (filter != null && filter.Length != 0))
+            if (searchType == "filter" && (filter != null && filter.Length > 0))
             {
                 result.products = await ListFilteredProducts(searchQuery, filter);
             } else
@@ -41,15 +42,15 @@ namespace SeriousAPI.Controllers
             // Handle category list
             if (searchType == "preview")
             {
-                cmd.CommandText = @"SELECT DISTINCT ProductCategory FROM ProductsTable WHERE ProductCategory=@Category;";
+                cmd.CommandText = @"SELECT DISTINCT ProductCategory FROM ProductsTable WHERE ProductCategory LIKE CONCAT('%', @Category, '%');";
                 cmd.Parameters.AddWithValue("@Category", searchQuery);
 
                 MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
                 List<string> categoryList = CreateCategoryList(dataReader);
                 result.categories = categoryList;
-            } else
+            } else 
             {
-                result.categories = new List<string>();
+                result.categories = await ListFilters(searchQuery, filter);
             }
             
             return result;
@@ -133,20 +134,18 @@ namespace SeriousAPI.Controllers
         {
             var cmd = this.MySqlDatabase.Connection.CreateCommand();
 
-            if ((searchType == "string") || (searchType == "preview"))
+            if ((searchType == "string") || (searchType == "preview") || (searchType == "filter"))
             {
-                //cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductName=@Query;";
                 cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductName LIKE CONCAT('%', @Query, '%');";
                 cmd.Parameters.AddWithValue("@Query", searchQuery);
 
             }
             else if (searchType == "category")
             {
-                cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductCategory LIKE CONCAT('%', @Category, '%');";
-                //cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductCategory=@Category;";
+                cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ProductCategory = @Category;";
                 cmd.Parameters.AddWithValue("@Category", searchQuery);
             }
-
+            // else with default value or error message
             MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
             return CreateProductList(dataReader);
         }
@@ -157,8 +156,13 @@ namespace SeriousAPI.Controllers
             var cmd = this.MySqlDatabase.Connection.CreateCommand();
 
             cmd.CommandText = @"SELECT * FROM ProductsTable WHERE ";
+            if(searchQuery != null)
+            {
+                cmd.CommandText += "ProductName LIKE CONCAT('%', '" + searchQuery + "' , '%') AND ";
+            }
+
             int counter = 0;
-            foreach(var entry in filterContainer.FilterDictionary)
+            foreach(var entry in filterContainer.FilterLookup)
             {
                 if (counter > 0)
                 {
@@ -168,19 +172,37 @@ namespace SeriousAPI.Controllers
                 counter++;
             }
             cmd.CommandText += ";";
-            Debug.WriteLine("This is your command: " + cmd.CommandText);
             MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
             return CreateProductList(dataReader);
         }
 
-        private string AddFilter(KeyValuePair<string, string> entry)
+        private async Task<IEnumerable<string>> ListFilters(string searchQuery, string[] filters)
+        {
+            var cmd = this.MySqlDatabase.Connection.CreateCommand();
+            cmd.CommandText = @"SELECT DISTINCT ProductCategory FROM ProductsTable WHERE ProductName LIKE CONCAT('%', @Query, '%');";
+            cmd.Parameters.AddWithValue("@Query", searchQuery);
+
+            MySqlDataReader dataReader = await Task.Run(() => cmd.ExecuteReader());
+            return CreateCategoryList(dataReader);
+        }
+
+        private string AddFilter(IGrouping<string, string> entry)
         {
             switch (entry.Key)
             {
-                case "string":
-                    return "ProductName LIKE CONCAT('%', '" + entry.Value + "' , '%')";
                 case "category":
-                    return "ProductCategory = " + entry.Value;
+                    string ret = "(";
+                    int counter = 0;
+                    foreach (string str in entry)
+                    {
+                        if ( counter > 0)
+                        {
+                            ret += " OR ";
+                        }
+                        ret += "ProductCategory = '" + str + "'";
+                        counter++;
+                    }
+                    return ret += ")";
                 case "stock":
                     return "ProductStock > 0";
                 default:
